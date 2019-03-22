@@ -1,0 +1,670 @@
+---
+title: "ECO 2400 Simulation"
+author: "Colin Wallace"
+date: "December 22, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy = TRUE)
+#install.packages("aod")
+library(lmtest)
+library(aod)
+library(ggplot2)
+```
+
+```{r Function}
+
+n <- 100
+R <- 10
+
+#summary(unrest)
+#summary(rest)
+
+regs <- function(col = 1, y, x) {
+  unrest <- lm(y[,col] ~ x[,col])
+  #rest <- lm(y[,col] - x[,col] ~ 1)
+  W <- wald.test(Sigma = vcov(unrest), b = coef(unrest), Terms = 2, H0 = 1, df = unrest$df.residual, verbose = TRUE)
+  return (W$result)
+}
+
+dgp <- function(B1 = 1, n = 20, R = 1) {
+  B0 <- 0.5
+  x <- replicate(R, rnorm(n, 0, 1))
+  u <- replicate(R, rnorm(n, 0, 1))
+  y <- B0 + B1 * x + u
+
+  reps <- 1:R
+  fits <- lapply(reps, regs, y = y, x = x)
+
+  return (fits)
+}
+
+#test <- sapply(B1.h, dgp, n = n, R = R)
+#test[,20]
+
+```
+
+## Question 1
+
+```{r Q1ai}
+
+set.seed(1992)
+
+a.i <- dgp(1, 20, 1)
+a.i
+```
+
+The P-value of the chi-squared test is `r a.i[[1]]$chi2[3] `, so I would fail to reject $H_{0}$ at 5% level.
+
+```{r Q1aii}
+
+R <- 500
+a.ii <- dgp(1, 20, R)
+
+Pvals <- sapply(a.ii, function(m) m$chi2[3])
+nRej <- sum(Pvals <= 0.05)
+ratio <- nRej / R
+
+```
+
+I reject the null `r nRej ` times, for a ratio of `r ratio `. This is relatively higher than 5%.
+
+```{r Q1b}
+
+n <- 100
+R <- 500
+b.ii <- dgp(1, n, R)
+
+Pvals <- sapply(b.ii, function(m) m$chi2[3])
+nRej <- sum(Pvals <= 0.05)
+ratio <- nRej / R
+
+```
+
+I reject the null `r nRej ` times, for a ratio of `r ratio `. With more observations, this is relatively closer to 5%.
+
+## Question 2
+
+```{r Q2a-d}
+
+#a
+h <- seq(-2, 2, 0.1)
+Beta1 <- 1 + h / 10
+Beta0 <- 0.5
+
+n <- 100
+R <- 500
+
+# This function should accept the vector of beta1s, the number of obs., and the number of samples.
+# And return the rejection frequency.
+beta.h <- function(Beta1 = Beta1, n = n, R = R) {
+
+  b <- sapply(Beta1, dgp, n = n, R = R)
+
+  Pvals <- matrix(sapply(b, function(m) m$chi2[3]), nrow = R, dimnames = list(x = 1:R, y = Beta1))
+  nRej <- apply(Pvals, 2, function(m) sum(m <= 0.05))
+  ratio <- nRej / R
+  return (ratio)
+  
+}
+
+#b-c
+ratio <- beta.h(Beta1, n, R)
+
+#d
+#plot(x = names(ratio), y = ratio, main = "Rejection Frequency (n = 100)", xlab = "True Coefficient", ylab = "Rejection Frequency")
+
+ggplot(data = data.frame(x = Beta1, y = ratio), mapping = aes(x = x, y = y)) + geom_point() + labs(title = "Rejection Frequency (n = 100)", x = "True Coefficient", y = "Rejection Frequency")
+
+```
+
+The shape of this function is similar to what I expected. The closer the true coefficient is to our null hypothesis of $\beta_{1} = 1$, the less frequently the null hypothesis is rejected.
+
+```{r Q2e}
+
+#e
+h <- seq(-2, 2, 0.1)
+Beta1 <- 1 + h / 10
+Beta0 <- 0.5
+
+n <- 400
+R <- 500
+
+ratio400 <- beta.h(Beta1, n, R)
+
+#plot(x = names(ratio400), y = ratio400, main = "Rejection Frequency (n = 400)", xlab = "True Coefficient", ylab = "Rejection Frequency")
+
+ggplot(data = data.frame(x = Beta1, y = ratio400), mapping = aes(x = x, y = y)) + geom_point() + labs(title = "Rejection Frequency (n = 400)", x = "True Coefficient", y = "Rejection Frequency")
+
+n <- 1000
+
+ratio1000 <- beta.h(Beta1, n, R)
+
+#plot(x = names(ratio1000), y = ratio1000, main = "Rejection Frequency (n = 1000)", xlab = "True Coefficient", ylab = "Rejection Frequency")
+
+ggplot(data = data.frame(x = Beta1, y = ratio1000), mapping = aes(x = x, y = y)) + geom_point() + labs(title = "Rejection Frequency (n = 1000)", x = "True Coefficient", y = "Rejection Frequency")
+
+```
+
+The change of the function shape makes sense. With more observations in each sample, we know our estimated coefficient converges to the truth. So our confidence intervals shrink, meaning coefficients far from our null hypothesis are less likely to appear close to it, and we reject more often.
+
+## Question 3
+
+```{r Q3}
+
+#a
+n <- 100
+
+#b
+h <- seq(-2, 2, 0.1)
+Beta1 <- 1 + h / sqrt(n)
+Beta0 <- 0.5
+
+#c-d
+R <- 500
+
+ratio <- beta.h(Beta1, n, R)
+
+#e
+#plot(x = names(ratio), y = ratio, main = "Rejection Frequency (n = 100)", xlab = "True Coefficient", ylab = "Rejection Frequency")
+
+ggplot(data = data.frame(x = Beta1, y = ratio), mapping = aes(x = x, y = y)) + geom_point() + labs(title = "Rejection Frequency (n = 100)", x = "True Coefficient", y = "Rejection Frequency")
+
+#f
+n <- 400
+Beta1 <- 1 + h / sqrt(n)
+
+ratio400 <- beta.h(Beta1, n, R)
+
+#plot(x = names(ratio400), y = ratio400, main = "Rejection Frequency (n = 400)", xlab = "True Coefficient", ylab = "Rejection Frequency")
+
+ggplot(data = data.frame(x = Beta1, y = ratio400), mapping = aes(x = x, y = y)) + geom_point() + labs(title = "Rejection Frequency (n = 400)", x = "True Coefficient", y = "Rejection Frequency")
+
+n <- 1000
+Beta1 <- 1 + h / sqrt(n)
+
+ratio1000 <- beta.h(Beta1, n, R)
+
+#plot(x = names(ratio1000), y = ratio1000, main = "Rejection Frequency (n = 1000)", xlab = "True Coefficient", ylab = "Rejection Frequency")
+
+ggplot(data = data.frame(x = Beta1, y = ratio1000), mapping = aes(x = x, y = y)) + geom_point() + labs(title = "Rejection Frequency (n = 1000)", x = "True Coefficient", y = "Rejection Frequency")
+
+```
+
+Dividing $h$ by $\sqrt{n}$ instead of $10$ means that the function looks similar to Question 2 when $n = 100$. The difference is now that the range of coefficients narrows as $n$ increases, in such a way as to counteract the law of large numbers. It shows that beyond narrowing, the shape of this function maintains as $n$ increases.
+
+## Question 4
+
+```{r Q4a-b}
+
+n <- 10
+theta1 <- 0.4
+theta2 <- 0.6
+
+#a
+
+# W.l.o.g., let theta = 0.4 while finding cutoff values.
+
+#pnorm(3)
+#qnorm(1)
+#c1 <- 0.155 # Just to test.
+#c2 <- n^(-0.5) * qnorm(1 - 0.3 + pnorm(n^(0.5) * (c1 - 0.6))) + 0.6
+#alpha <- 1 - pnorm(n^(0.5) * (c2 - 0.4)) + pnorm(n^(0.5) * (c1 - 0.4))
+
+# This function is the absolute value of alpha as a function of c1, minus 0.3. Therefore this function should be minimized at the c1 s.t. alpha = 0.3.
+cutoff <- function(c1, n = 10) {
+  abs(1 - pnorm(n^(0.5) * (n^(-0.5) * qnorm(1 - 0.3 + pnorm(n^(0.5) * (c1 - theta2))) + theta2 - theta1)) + pnorm(n^(0.5) * (c1 - theta1)) - 0.3)
+}
+
+c1 <- optimize(cutoff, interval = c(0, 0.4))$minimum
+c2 <- n^(-0.5) * qnorm(1 - 0.3 + pnorm(n^(0.5) * (c1 - theta2))) + theta2
+
+c1.20 <- optimize(cutoff, interval = c(0, 0.4), n = 20)$minimum
+c2.20 <- 20^(-0.5) * qnorm(1 - 0.3 + pnorm(20^(0.5) * (c1 - theta2))) + theta2
+
+c1.40 <- optimize(cutoff, interval = c(0, 0.4), n = 40)$minimum
+c2.40 <- 40^(-0.5) * qnorm(1 - 0.3 + pnorm(40^(0.5) * (c1 - theta2))) + theta2
+
+power.a <- function(theta) {
+  1 - pnorm(n^(0.5) * (c2 - theta)) + pnorm(n^(0.5) * (c1 - theta))
+}
+
+#power(0.1)
+
+plot.power <- ggplot(data = data.frame(x = 0), mapping = aes(x = x)) + stat_function(fun = power.a, colour = "blue") + xlim(-0.5, 1.5) + ylim(0, 1)
+
+#b
+
+#0.3 = 1 - pnorm(n^(0.5) * (c - theta2))
+#n^(0.5) * (c - theta2) = qnorm(1 - 0.3)
+c = n^(-0.5) * qnorm(1 - 0.3) + theta2
+c.20 = 20^(-0.5) * qnorm(1 - 0.3) + theta2
+c.40 = 40^(-0.5) * qnorm(1 - 0.3) + theta2
+
+power.b <- function(theta) {
+  1 - pnorm(n^(0.5) * (c - theta))
+}
+
+#plot(power.b, new = F)
+#curve(power.b, from = 0, to = 1, add = T)
+plot.power <- plot.power + stat_function(fun = power.b, colour = "red") + labs(title = "Power Functions", x = "Coefficient", y = "Power")
+plot.power
+
+dom <- optimize(function(theta) abs(power.b(theta) - power.a(theta)), interval = c(0.5, 0.7))$minimum
+
+```
+
+The UMPU test $\phi = 1$ if $\bar{Y} < c_{1}, \bar{Y} > c_{2}$ for two-sided hypothesis.
+$\alpha = 0.3 = Pr_{\Theta_{0}}(\bar{Y} < c_{1}) + Pr_{\Theta_{0}}(\bar{Y} > c_{2})$
+
+The UMP test $\phi_{1} = 1$ if $\bar{Y} > c$ for one-sided hypothesis.
+
+$\phi_{1}$ dominates $\phi$ in terms of power when $\theta >$ `r dom `.
+
+```{r Q4c}
+
+n <- 10
+R <- 100
+rho <- seq(-0.5, 1.5, 0.1)
+theta1 <- 0.4
+theta2 <- 0.6
+
+#c
+
+sim <- function(n = 10, t = 0.5, R = 100, test.2s = TRUE) {
+
+  y <- replicate(R, rnorm(n, t, 1))
+
+  y.mean <- apply(y, 2, mean)
+  
+  # Use the appropriate cutoff values based on number of obs.
+  if (n == 20) {
+    c1 <- c1.20
+    c2 <- c2.20
+    c <- c.20
+  } else if (n == 40) {
+    c1 <- c1.40
+    c2 <- c2.40
+    c <- c.40
+  } else {
+    c1 <- c1
+    c2 <- c2
+    c <- c
+  }
+  
+  if (test.2s) {
+    phi <- ifelse(c1 <= y.mean & y.mean <= c2, 0, 1)
+  } else {
+    phi <- ifelse(c >= y.mean, 0, 1)
+  }
+
+  power.sim <- sum(phi) / R
+  
+  return (power.sim)
+}
+
+power.sim <- sapply(rho, function(m) sim(n, m, R, TRUE))
+
+power1.sim <- sapply(rho, function(m) sim(n, m, R, FALSE))
+
+ggplot(data = data.frame(x = rho, y = power.sim), mapping = aes(x = x, y = y)) + geom_point(colour = "blue") + geom_point(data = data.frame(x = rho, y = power1.sim), mapping = aes(x = x, y = y), colour = "red") + labs(title = "Sim. Power Functions (R = 100)", x = "Coefficient", y = "Power")
+
+R <- 10000
+
+power.sim10k <- sapply(rho, function(m) sim(n, m, R, TRUE))
+
+power1.sim10k <- sapply(rho, function(m) sim(n, m, R, FALSE))
+
+ggplot(data = data.frame(x = rho, y = power.sim10k), mapping = aes(x = x, y = y)) + geom_point(colour = "blue") + geom_point(data = data.frame(x = rho, y = power1.sim10k), mapping = aes(x = x, y = y), colour = "red") + labs(title = "Sim. Power Functions (R = 10000)", x = "Coefficient", y = "Power")
+
+```
+
+The simulation with 100 replications has some outliers, but generally matches the shape of the analytical power functions. With 10000 replications, the outliers lessen and the shape is clearer.
+
+```{r Q4d}
+
+n <- 10
+R <- 1000
+theta.star <- 0.8
+
+power.diff10 <- sim(n, theta.star, R, TRUE) - sim(n, theta.star, R, FALSE)
+
+n <- 20
+
+power.diff20 <- sim(n, theta.star, R, TRUE) - sim(n, theta.star, R, FALSE)
+
+n <- 40
+
+power.diff40 <- sim(n, theta.star, R, TRUE) - sim(n, theta.star, R, FALSE)
+
+#power.diff <- sapply(n, function(obs) sim(obs, theta.star, R, TRUE) - sim(obs, theta.star, R, FALSE))
+
+```
+
+
+By the law of large numbers, the distribution of our estimate of theta, $\bar{Y}$, should converge to the true theta as $n \rightarrow \infty$. Therefore the estimated power of both tests when $\theta^{*} = 0.8$ should converge to one, and their difference converges to zero.
+
+With 1000 replications, the difference in simulated power for $\theta^{*} = 0.8$ is `r c(power.diff10, power.diff20, power.diff40) ` for $n = 10, 20, 40$ respectively. This supports the above intuition.
+
+## Question 5
+
+```{r Q5}
+
+mu <- 1
+var <- 1
+n <- 10
+alpha <- 0.3
+R <- 10000
+
+y <- replicate(R, rnorm(n, mu, var))
+
+y.mean <- apply(y, 2, mean)
+
+sd.hat <- apply(y, 2, sd)
+
+a <- 1 - sqrt(0.7)
+
+a.half <- a / 2
+
+#y <- y[,1]
+
+CS <- function(y, mean = mu, sigsq = var, level = a) {
+  y.sqerr <- sum((y - mean(y))^2)
+  var.low <- y.sqerr / qchisq(1 - level / 2, 9)
+  var.high <- y.sqerr / qchisq(level / 2, 9)
+  var.in <- ifelse((var.low <= var) && (var <= var.high), 1, 0)
+  
+  mean.in <- ifelse((n * (mean(y) - mean)^2 / sigsq) <= qnorm(1 - level / 2, 0, 1)^2, 1, 0)
+  return(var.in & mean.in)
+}
+
+CS.joint <- apply(y, 2, CS, level = a)
+
+CS.jointfreq <- sum(CS.joint) / R
+
+a.tilde <- alpha / 2
+
+CS.sep <- apply(y, 2, CS, level = a.tilde)
+
+CS.sepfreq <- sum(CS.sep) / R
+
+```
+
+The coverage frequency of the joint CS, `r CS.jointfreq`, is closer to $70\%$ than the Cartesian product of separate CS, `r CS.sepfreq`.
+
+## Question 6
+
+```{r Q6}
+
+B1 <- 1
+B2 <- 1
+B <- c(B1, B2)
+n <- 100
+alpha <- 0.05
+
+dgp <- function(n = 100) {
+  x1 <- rnorm(n, 0, 1)
+  x2 <- rnorm(n, 0, 1)
+  u <- rnorm(n, 0, 1)
+  y <- x1 * B1 + x2 * B2 + u
+  reg <- lm(y ~ x1 + x2 - 1)
+  return(reg$coef)
+}
+
+#y <- replicate(1000, dgp(100))
+
+#quantile(t(y)[,2], probs = c(0.025, 0.975))
+
+B1hat.se <- sqrt(n^-1)
+
+#a
+
+CS1.high <- qt(1 - alpha / 2, n - 1) * B1hat.se + B1
+CS1.low <- qt(alpha / 2, n - 1) * B1hat.se + B1
+
+ggplot(data = data.frame(x = c(CS1.high, CS1.low), y = c(0, 0)), mapping = aes(x = x, y = y)) + geom_line() + labs(title = "CS1 (Confidence Interval of Beta1)", x = "Beta1", y = "Beta2")
+
+#b
+
+
+R <- matrix(c(1, 0, 0, 1), nrow = 2)
+est <- c(0.75, 1.0) # For testing
+#t(R %*% Bhat - B) %*% solve(R %*% matrix(c(1, 0, 0, 1), nrow = 2) %*% t(R) * (1 / n)) %*% (R %*% Bhat - B) = qchisq(1 - alpha, n - 2)
+
+Wald.invert <- function(i, B.fixed = B2) {
+  #val <- abs(R %*% matrix(c(1, 0, 0, 1), nrow = 2) %*% t(R) %*% solve((R %*% c(i, B.fixed) - B) %*% t(R %*% c(i, B.fixed) - B)) * (1 / n) * qchisq(1 - alpha, n - 2) - 1)
+  est <- c(i, B.fixed)
+  val <- abs(qchisq(1 - alpha, 2) - t(R %*% est - B) %*% solve(R %*% matrix(c(1, 0, 0, 1), nrow = 2) %*% t(R) * (1 / n)) %*% (R %*% est - B))
+  return(val)
+}
+
+#Wald.invert(1.19842)
+
+rho2 <- seq(0.76, 1.24, by = 0.04)
+
+CS.high <- sapply(rho2, function(m) optimize(Wald.invert, interval = c(1.0, 1.3), B.fixed = m))
+
+CS.low <- sapply(rho2, function(m) optimize(Wald.invert, interval = c(1.0, 0.7), B.fixed = m))
+
+ggplot(data = data.frame(x = rho2, y = unlist(CS.high[1,])), mapping = aes(x = x, y = y)) + geom_line() + geom_line(data = data.frame(x = rho2, y = unlist(CS.low[1,]))) + labs(title = "CS (Confidence Set of Beta)", x = "Beta1", y = "Beta2")
+
+#c
+
+ggplot(data = data.frame(x = c(min(unlist(CS.low[1,])), max(unlist(CS.high[1,]))), y = c(0, 0)), mapping = aes(x = x, y = y)) + geom_line() + labs(title = "CS2 (Projected Confidence Interval of CS)", x = "Beta1", y = "Beta2")
+
+```
+
+The projection of CS, $CS_{2}$ is strictly larger than the confidence interval, $CS_{1}$. I think the implication is that even when $\hat\beta_{2} = \beta_{2} = 1$, the additional parameter leads to an additional degree of freedom, therefore a larger $\chi^{2}$ value, therefore a larger interval necessary.
+
+## Question 7
+
+```{r Q7a}
+
+p <- 1
+n <- 100
+R <- 1000
+rho.seq <- seq(-0.9, 0.9, 0.1)
+b <- 0
+
+dgp <- function(Rho = 0, ols = TRUE) {
+  v <- rnorm(n, 0, 1)
+  z <- rnorm(n, 0, 1)
+  x <- z * p + v
+  u <- Rho * v + rnorm(n, 0, 1)
+  y <- x * b + u
+  if (ols) {
+    return(lm(y ~ x - 1)$coef)
+  } else {
+    Pz <- z %*% solve(t(z) %*% z) %*% t(z)
+    return(solve(t(x) %*% Pz %*% x) %*% t(x) %*% Pz %*% y)
+  }
+}
+
+#sapply(rho.seq, function(r) replicate(R, dgp(r)))
+
+#summary(dgp(0.8))
+
+#i
+
+#Beta.OLS = (t(x) %*% x))^-1 %*% t(x) %*% y
+#Beta.OLS = (t(x) %*% x))^-1 %*% t(x) %*% x * Beta + (t(x) %*% x))^-1 %*% t(x) %*% u
+#Beta.OLS = (t(x) %*% x))^-1 %*% t(x) %*% (Rho * v)
+
+B.OLS <- function(r) r / 2 # I think this is the case.
+
+ggplot(data = data.frame(x = 0, y = 0), mapping = aes(x = x, y = y)) + stat_function(fun = B.OLS, xlim = c(-1, 1)) + labs(title = "Bias of OLS Estimator", x = "Rho", y = "Bias")
+
+#ii
+
+B.OLShat <- apply(sapply(rho.seq, function(r) replicate(R, dgp(r))), 2, mean)
+
+ggplot(data = data.frame(x = rho.seq, y = B.OLShat), mapping = aes(x = x, y = y)) + geom_line() + labs(title = "Sim. Bias of OLS Estimator", x = "Rho", y = "Bias")
+
+#iii
+
+B.2SLShat <- apply(sapply(rho.seq, function(r) replicate(R, dgp(r, ols = FALSE))), 2, mean)
+
+ggplot(data = data.frame(x = rho.seq, y = B.2SLShat), mapping = aes(x = x, y = y)) + geom_line() + labs(title = "Sim. Bias of 2SLS Estimator", x = "Rho", y = "Bias")
+
+```
+
+Compared to $\hat B_{OLS}(\rho)$, $\hat B_{2SLS}(\rho)$ looks uncorrelated with $\rho$. I suspect outliers are mostly due to the finite sample.
+
+```{r Q7b}
+
+#i
+
+rho <- 0.5
+p.set <- c(-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2)
+n <- 100
+R <- 1000
+b <- 0
+
+dgp <- function(p = 0, n = 100) {
+  v <- rnorm(n, 0, 1)
+  z <- rnorm(n, 0, 1)
+  x <- z * p + v
+  u <- rho * v + rnorm(n, 0, 1)
+  y <- x * b + u
+    
+  Pz <- z %*% solve(t(z) %*% z) %*% t(z)
+  return(solve(t(x) %*% Pz %*% x) %*% t(x) %*% Pz %*% y)
+}
+
+beta.2SLShat100 <- sapply(p.set, function(r) replicate(R, dgp(r, n)))
+apply(beta.2SLShat100, 2, mean)
+apply(beta.2SLShat100, 2, var)
+
+#ii
+
+n <- 1000
+
+beta.2SLShat1k <- sapply(p.set, function(r) replicate(R, dgp(r, n)))
+apply(beta.2SLShat1k, 2, mean)
+apply(beta.2SLShat1k, 2, var)
+
+```
+
+In (b.i), the averages are not very close to $\beta$, and the variances increase as $\pi$ approaches zero. In (b.ii), the averages are somewhat close to $\beta$ when $\pi$ isn't too close to zero. The variance has decreased at every $\pi$, but still increases when $\pi$ is close to zero.
+
+```{r Q7c}
+
+#i
+
+rho <- 0.5
+p.seq <- seq(-1, 1, 0.1)
+n <- 100
+R <- 1000
+b <- 0
+
+dgp <- function(p = 0, n = 100) {
+  v <- rnorm(n, 0, 1)
+  z <- rnorm(n, 0, 1)
+  x <- z * (p / sqrt(n)) + v
+  u <- rho * v + rnorm(n, 0, 1)
+  y <- x * b + u
+    
+  Pz <- z %*% solve(t(z) %*% z) %*% t(z)
+  return(solve(t(x) %*% Pz %*% x) %*% t(x) %*% Pz %*% y)
+}
+
+beta.2SLShat100 <- sapply(p.seq, function(r) replicate(R, dgp(r, n)))
+apply(beta.2SLShat100, 2, mean)
+
+#ii
+
+n <- 200
+
+beta.2SLShat200 <- sapply(p.seq, function(r) replicate(R, dgp(r, n)))
+apply(beta.2SLShat200, 2, mean)
+
+n <- 500
+
+beta.2SLShat500 <- sapply(p.seq, function(r) replicate(R, dgp(r, n)))
+apply(beta.2SLShat500, 2, mean)
+
+n <- 1000
+
+beta.2SLShat1000 <- sapply(p.seq, function(r) replicate(R, dgp(r, n)))
+apply(beta.2SLShat1000, 2, mean)
+
+```
+
+There appears to be little to no significant reduction in bias as $n$ increases.
+
+```{r Q7d}
+
+#i
+
+rho <- 0.5
+p.set <- c(-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2)
+n <- 100
+R <- 1000
+b <- 0
+
+dgp <- function(p = 0, n = 100) {
+  v <- rnorm(n, 0, 1)
+  z <- rnorm(n, 0, 1)
+  x <- z * p + v
+  u <- rho * v + rnorm(n, 0, 1)
+  y <- x * b + u
+    
+  Pz <- z %*% solve(t(z) %*% z) %*% t(z)
+  return(solve(t(x) %*% Pz %*% x) %*% t(x) %*% Pz %*% y)
+}
+
+beta.2SLShat100 <- sapply(p.set, function(r) replicate(R, dgp(r, n)))
+beta.se <- apply(beta.2SLShat100, 2, sd)
+
+CS.high <- beta.2SLShat100 + qt(1 - alpha / 2, n - 1) * beta.se
+CS.low <- beta.2SLShat100 + qt(alpha / 2, n - 1) * beta.se
+
+apply(ifelse(CS.high >= 0 & CS.low <= 0, 1, 0), 2, sum) / 1000
+
+dgp.ar <- function(p = 0, n = 100) {
+  v <- rnorm(n, 0, 1)
+  z <- rnorm(n, 0, 1)
+  x <- z * p + v
+  u <- rho * v + rnorm(n, 0, 1)
+  y <- x * b + u
+  
+  beta <- 1 # for testing
+  
+  sigma.zuhat <- sqrt((sum(z^2) / n) * (sum((y - x * beta)^2) / n))
+  
+  AR <- function(b) {
+    val <- qchisq(0.95, 1) - (1 / n) * (sum(z * (y - x * b)) / sqrt((sum(z^2) / n) * (sum((y - x * b)^2) / n)))^2
+    return(abs(val))
+  }
+    
+  Pz <- z %*% solve(t(z) %*% z) %*% t(z)
+  b.hat <- solve(t(x) %*% Pz %*% x) %*% t(x) %*% Pz %*% y
+  
+  CS.low <- optimize(AR, interval = c(-10, b.hat))
+  CS.high <- optimize(AR, interval = c(10, b.hat))
+
+  return(ifelse(CS.low$minimum <= 0 & CS.high$minimum >= 0, 1, 0))
+}
+
+CS.ARin <- sapply(p.set, function(r) replicate(R, dgp.ar(r, n)))
+apply(CS.ARin, 2, sum) / 1000
+
+#ii
+
+n <- 1000
+
+beta.2SLShat1k <- sapply(p.set, function(r) replicate(R, dgp(r, n)))
+beta.se <- apply(beta.2SLShat1k, 2, sd)
+
+CS.high <- beta.2SLShat1k + qt(1 - alpha / 2, n - 1) * beta.se
+CS.low <- beta.2SLShat1k + qt(alpha / 2, n - 1) * beta.se
+
+apply(ifelse(CS.high >= 0 & CS.low <= 0, 1, 0), 2, sum) / 1000
+
+CS.ARin <- sapply(p.set, function(r) replicate(R, dgp.ar(r, n)))
+apply(CS.ARin, 2, sum) / 1000
+
+```
+
+The results when $n = 1000$ appear "smoother", but the t-test can still result in enormous confidence intervals that contain $\beta = 0$ more than 95% of the time. The results from AR intervals don't suffer from this overconfidence as much, but underperform when $\pi \approx 0$.

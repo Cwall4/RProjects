@@ -1,0 +1,217 @@
+---
+title: "ECO 2401 Problem Set"
+author: "Colin Wallace"
+date: "July 10, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy = TRUE)
+```
+
+## Regression and Cost Function Estimation
+
+```{r Q1}
+library(xlsx)
+library(ggplot2)
+setwd("C:/Users/Colin/Google Drive/Courses/PhD/ECO 2401/Problem Set")
+ED.raw <- read.xlsx("ElecDistribution.xls", 1)
+
+ED <- transform(ED.raw, TC = OM + BC + ADMIN + DEP + INT, PCAP = TOTPLANT / KMTOT, WAGE.logsq = 0.5 * log(WAGE)^2)
+
+ED$PCAP.logsq <- 0.5 * log(ED$PCAP)^2
+
+ED.reg <- lm(log(TC / CUST) ~ log(CUST) + I(log(CUST)^2) + log(WAGE) + log(PCAP) + WAGE.logsq + PCAP.logsq + I(log(WAGE) * log(PCAP)) + I(log(CUST) * log(WAGE)) + I(log(CUST) * log(PCAP)) + PUC + log(KWH/CUST) + log(LIFE) + log(LF) + log(KMTOT/CUST), data = ED)
+
+# a)
+
+summary(ED.reg)
+
+# b)
+
+ED.regb <- lm(log(TC / CUST) ~ log(CUST) + I(log(CUST)^2) + log(WAGE) + log(PCAP) + WAGE.logsq + PCAP.logsq + I(log(WAGE) * log(PCAP)) + PUC + log(KWH/CUST) + log(LIFE) + log(LF) + log(KMTOT/CUST), data = ED)
+
+summary(ED.regb)
+```
+
+A homothetic function is a monotonic transformation of a homogeneous function. The log is a monotonic transformation, and reversing it the equation is $\frac{TC}{CUST} = exp(\gamma_{0}) * CUST^{\gamma_{1}} * CUST^{\gamma}$. Multiplying all observed RHS variables by a constant $\alpha$,  If $\beta_{31} = \beta_{32} = 0$, then $\frac{\delta log(TC / CUST)}{\delta log(CUST)} = \gamma_{1} + 2 \gamma_{2} log(CUST)$.
+
+## Regression, Engle Curve Estimation and Equivalence Scales
+
+````{r Q2}
+
+SA <- read.csv("SouthAfrica.csv")
+
+SA.a <- subset(SA, nkids == 0 & nadults == 1)
+
+SA.asort <- SA.a[order(SA.a$ltexp),]
+
+plot.a <- ggplot(SA.asort, aes(ltexp, FoodShr)) + geom_point()
+
+reg.a <- lm(FoodShr ~ ltexp, data = SA.asort)
+
+#summary(reg.a)
+
+plot.a + geom_line(aes(y = reg.a$fitted.values), colour = "red") + ggtitle("Single-Adult Households")
+
+SA.b <- subset(SA, nkids == 0 & nadults == 2)
+
+SA.bsort <- SA.b[order(SA.b$ltexp),]
+
+plot.b <- ggplot(SA.bsort, aes(ltexp, FoodShr)) + geom_point()
+
+reg.b <- lm(FoodShr ~ ltexp, data = SA.bsort)
+
+plot.b + geom_line(aes(y = reg.b$fitted.values), colour = "red") + ggtitle("Two-Adult Households")
+
+# Part 2
+
+SA.hh <- transform(SA, hhsize = nkids + nadults)
+
+reg.nls <- nls(FoodShr ~ a.0 + a.1 * (ltexp - b.1 * log(hhsize)), data = SA.hh, start = list(a.0 = 1, a.1 = -0.5, b.1 = 0.5))
+
+summary(reg.nls)
+
+reg.ols <- lm(FoodShr ~ ltexp + log(hhsize), data = SA.hh)
+
+summary(reg.ols)
+
+- reg.ols$coef[3] / reg.ols$coef[2]
+
+reg.nls$m$getPars()[3] 
+
+b1hat.se <- sqrt(diag(vcov(reg.ols)))[3] / diag(vcov(reg.ols))[2]
+
+```
+
+# Bootstrap Simulations
+
+```{r Boot}
+# 1)
+
+mu <- 2
+sd <- 3 # var = 9
+R <- 100
+alpha <- 0.05
+
+boot.tstat <- function(xstar, xbar) {
+  tstat<- (mean(xstar) - mean(xbar)) / (sd(xstar) / sqrt(100))
+  return(tstat)
+  }
+
+dgp.n <- function(mu = 2, sd = 3, conf.int = FALSE) {
+  n <- 100
+  n.sqrt <- 10
+  x <- rnorm(n, mu, sd)
+  xbar.sd <- sd(x) / n.sqrt
+  boot <- replicate(999, sample(x, n, TRUE))
+  boot.t <- sort(apply(boot, 2, boot.tstat, xbar = mean(x)))
+  #confint.boot <- sample()
+  boot.upper <- mean(x) + boot.t[975] * xbar.sd
+  boot.lower <- mean(x) + boot.t[25] * xbar.sd
+  boot.in <- (mu < boot.upper & mu > boot.lower)
+  #t.test(x)
+  as.upper <- mean(x) + qt(0.975, 99) * xbar.sd
+  as.lower <- mean(x) + qt(0.025, 99) * xbar.sd
+  as.in <- (mu < as.upper & mu > as.lower)
+  #fits <- lapply(nreps, x, y = y, x = x)
+  if (conf.int == TRUE) {
+    return (c(as.lower, as.upper, as.in, boot.lower, boot.upper, boot.in))
+  } else {
+    return (c(as.in, boot.in))
+  }
+  
+}
+# a)
+
+dgp.n(conf.int = TRUE)
+
+# b)
+
+reps.n <- replicate(R, dgp.n())
+
+summary(t(reps.n))
+
+
+# 2)
+
+dgp.unif <- function(mu = 1.5, lo = 1, hi = 2, conf.int = FALSE) {
+  n <- 100
+  n.sqrt <- 10
+  x <- runif(n, lo, hi)
+  xbar.sd <- sd(x) / n.sqrt
+  boot <- replicate(999, sample(x, n, TRUE))
+  boot.t <- sort(apply(boot, 2, boot.tstat, xbar = mean(x)))
+  #confint.boot <- sample()
+  boot.upper <- mean(x) + boot.t[975] * xbar.sd
+  boot.lower <- mean(x) + boot.t[25] * xbar.sd
+  boot.in <- (mu < boot.upper & mu > boot.lower)
+  #t.test(x)
+  as.upper <- mean(x) + qt(0.975, 99) * xbar.sd
+  as.lower <- mean(x) + qt(0.025, 99) * xbar.sd
+  as.in <- (mu < as.upper & mu > as.lower)
+  #fits <- lapply(nreps, x, y = y, x = x)
+  if (conf.int == TRUE) {
+    return (c(as.lower, as.upper, as.in, boot.lower, boot.upper, boot.in))
+  } else {
+    return (c(as.in, boot.in))
+  }
+  
+}
+
+# a)
+
+dgp.unif(conf.int = TRUE)
+
+# b)
+
+reps.unif <- replicate(R, dgp.unif())
+
+summary(t(reps.unif))
+
+# 3)
+
+dgp.lin <- function(conf.int = FALSE) {
+  x <- c(-20, -10, 0, 10, 20)
+  error <- rnorm(5, 0, 1)
+  y <- 32 + 1.8 * x + error
+  n <- 100
+  n.sqrt <- 10
+  
+  xbar.sd <- sd(x) / n.sqrt
+  boot <- replicate(999, sample(x, n, TRUE))
+  boot.t <- sort(apply(boot, 2, boot.tstat, xbar = mean(x)))
+  #confint.boot <- sample()
+  boot.upper <- mean(x) + boot.t[975] * xbar.sd
+  boot.lower <- mean(x) + boot.t[25] * xbar.sd
+  boot.in <- (mu < boot.upper & mu > boot.lower)
+  #t.test(x)
+  as.upper <- mean(x) + qt(0.975, 99) * xbar.sd
+  as.lower <- mean(x) + qt(0.025, 99) * xbar.sd
+  as.in <- (mu < as.upper & mu > as.lower)
+  #fits <- lapply(nreps, x, y = y, x = x)
+  if (conf.int == TRUE) {
+    return (c(as.lower, as.upper, as.in, boot.lower, boot.upper, boot.in))
+  } else {
+    return (c(as.in, boot.in))
+  }
+  
+}
+
+```
+
+# Generalized Least Squares
+
+## Moving Average
+
+```{r MA}
+
+
+```
+
+$y_{t}^{*} = \frac{1}{3}(y_{t-1} + y_{t} + y_{t+1}) = \frac{1}{3}(3\alpha + \beta (x_{t-1} + x_{t} + x_{t+1}) + u_{t-1} + u_{t} + u_{t+1})$
+
+$y_{t}^{*} = \alpha + \beta x_{t}^{*} + u_{t}^{*}$,  where
+$u_{t}^{*} = \frac{1}{3}(u_{t-1} + u_{t} + u_{t+1})$, so 
+$\mathbb{E}[u_{t}^{*}] = 0, \space Var(u_{t}^{*}) = \frac{1}{3} \sigma^{2}, \space u_{t}^{*} \sim \mathcal{N}(0, \frac{1}{3} \sigma^{2})$.
+
